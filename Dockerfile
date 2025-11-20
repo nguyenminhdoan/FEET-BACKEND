@@ -25,12 +25,9 @@ ENV PYTHONPATH=/app
 # Create necessary directories
 RUN mkdir -p models data
 
-# Expose port
+# Expose port (Render will use the PORT environment variable)
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/api/health')" || exit 1
-
 # Run the FastAPI server
-CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use PORT env var if provided (Render requirement)
+CMD uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}
