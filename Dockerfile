@@ -22,12 +22,15 @@ COPY . .
 # Set PYTHONPATH to include project root
 ENV PYTHONPATH=/app
 
-# Create necessary directories
-RUN mkdir -p models data
+# Train models during build (so they're ready when container starts)
+RUN PYTHONPATH=/app python train_cost_models.py
 
-# Expose port (Render will use the PORT environment variable)
+# Expose port (Render/Railway/etc will override with $PORT)
 EXPOSE 8000
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/api/health')" || exit 1
+
 # Run the FastAPI server
-# Use PORT env var if provided (Render requirement)
 CMD uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8000}
