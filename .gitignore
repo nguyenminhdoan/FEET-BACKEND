@@ -47,6 +47,7 @@ models/*
 # Data
 data/*
 !data/.gitkeep
+!data/Bus_Maintenance_TimeSeries_2023-2025.csv
 
 # Environment variables
 .env
