@@ -43,6 +43,9 @@ class PredictionRequest(BaseModel):
     mileage_km: int = Field(..., description="Current bus mileage in kilometers")
     bus_make: str = Field(..., description="Bus manufacturer")
     bus_model: str = Field(..., description="Bus model")
+    year: Optional[int] = Field(None, description="Bus manufacturing year")
+    length_ft: Optional[int] = Field(None, description="Bus length in feet")
+    propulsion_type: Optional[str] = Field(None, description="Bus propulsion type")
 
     class Config:
         json_schema_extra = {
@@ -53,7 +56,10 @@ class PredictionRequest(BaseModel):
                 "age_months": 66,
                 "mileage_km": 220000,
                 "bus_make": "New Flyer",
-                "bus_model": "Xcelsior NG"
+                "bus_model": "Xcelsior NG",
+                "year": 2023,
+                "length_ft": 40,
+                "propulsion_type": "CNG"
             }
         }
 
