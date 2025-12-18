@@ -170,25 +170,28 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
             detail="Maximum prediction range is 24 months"
         )
 
-    # Load historical data - use YRT data which has all subsystems
+    # Try to load data from multiple sources
+    # High-level categories (1. Propulsion, 10. HVAC, etc.) use old CSV
+    # Detailed subsystems use YRT CSV
+    subsystem_df = None
+
+    # Try YRT data first (detailed subsystems)
     csv_path = 'data/YRT_FZ_sample_data.csv'
-    if not os.path.exists(csv_path):
-        # Fallback to old data location
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        df['Date'] = pd.to_datetime(df['Date'])
+        subsystem_df = df[df['Subsystem'] == subsystem_name].copy()
+
+    # If not found, try old data (high-level categories)
+    if subsystem_df is None or len(subsystem_df) == 0:
         csv_path = 'data/Bus_Maintenance_TimeSeries_2023-2025.csv'
-        if not os.path.exists(csv_path):
-            csv_path = 'Bus_Maintenance_TimeSeries_2023-2025.csv'
-            if not os.path.exists(csv_path):
-                raise HTTPException(
-                    status_code=404,
-                    detail="Training data not found"
-                )
+        if os.path.exists(csv_path):
+            df = pd.read_csv(csv_path)
+            df['Date'] = pd.to_datetime(df['Date'])
+            subsystem_df = df[df['Subsystem'] == subsystem_name].copy()
 
-    df = pd.read_csv(csv_path)
-    df['Date'] = pd.to_datetime(df['Date'])
-
-    # Get subsystem data
-    subsystem_df = df[df['Subsystem'] == subsystem_name].copy()
-    if len(subsystem_df) == 0:
+    # If still not found, error
+    if subsystem_df is None or len(subsystem_df) == 0:
         raise HTTPException(
             status_code=404,
             detail=f"No data for subsystem: {subsystem_name}"
@@ -323,6 +326,13 @@ async def get_subsystems():
 
                     # Extract subsystem name from metadata or folder name
                     subsystem_name = metadata.get('subsystem', item.replace('_cost_model', ''))
+
+                    # Filter out subsystems with tiny datasets (< 10 samples)
+                    # These are marked with 🚨 in training output and are very unreliable
+                    original_records = metadata.get('original_records', 0)
+                    if original_records < 10:
+                        print(f"Skipping {subsystem_name} - only {original_records} samples (unreliable)")
+                        continue
 
                     # Create ID by replacing spaces with underscores and removing special chars
                     subsystem_id = subsystem_name.replace(' ', '_').replace('/', '_').replace('&', 'and')

@@ -780,6 +780,11 @@ def main():
         print("  data/Bus_Maintenance_TimeSeries_2023-2025.csv")
         return
 
+    # Save processed data to CSV for API predictions
+    csv_path = 'data/YRT_FZ_sample_data.csv'
+    df.to_csv(csv_path, index=False)
+    print(f"Saved processed data to {csv_path}")
+
     print()
 
     # Show PM/CM distribution
