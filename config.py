@@ -12,35 +12,98 @@ MODEL_DIR = os.path.join(BASE_DIR, 'models')
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Subsystems to monitor
+# Subsystems to monitor - Based on real YRT BEB data
 SUBSYSTEMS = {
-    'HV_Battery': {
-        'name': 'HV Battery Packs',
-        'sensors': ['voltage', 'current', 'temperature', 'soc'],
-        'base_cost': 510,
-        'degradation_rate': 0.15,  # 15% per year
-        'failure_threshold': 0.7
-    },
-    'Traction_Motor': {
-        'name': 'Traction Motor',
-        'sensors': ['vibration', 'temperature', 'rpm', 'current'],
-        'base_cost': 105,
+    'Propulsion': {
+        'name': '1. Propulsion',
+        'full_name': '1. Propulsion',
+        'base_cost': 196,
         'degradation_rate': 0.08,
         'failure_threshold': 0.75
     },
-    'HVAC_Roof': {
-        'name': 'Roof HVAC Unit',
-        'sensors': ['temperature', 'pressure', 'airflow', 'power_consumption'],
-        'base_cost': 90,
+    'ESS_HV': {
+        'name': '2. Energy Storage & High Voltage (ESS & HV)',
+        'full_name': '2. Energy Storage & High Voltage (ESS & HV)',
+        'base_cost': 1876,
+        'degradation_rate': 0.15,
+        'failure_threshold': 0.70
+    },
+    'Low_Voltage_Electrical': {
+        'name': '3. Low Voltage Electrical',
+        'full_name': '3. Low Voltage Electrical',
+        'base_cost': 383,
+        'degradation_rate': 0.10,
+        'failure_threshold': 0.70
+    },
+    'Brakes_Pneumatics_ABS': {
+        'name': '4. Brakes, Pneumatics and ABS',
+        'full_name': '4. Brakes, Pneumatics and ABS',
+        'base_cost': 1417,
         'degradation_rate': 0.12,
         'failure_threshold': 0.65
     },
-    'Air_Compressor': {
-        'name': 'Air Compressor (Braking)',
-        'sensors': ['pressure', 'temperature', 'vibration', 'duty_cycle'],
-        'base_cost': 50,
+    'Axle_Suspension_Differential': {
+        'name': '5. Axle, Suspension & Differential',
+        'full_name': '5. Axle, Suspension & Differential',
+        'base_cost': 507,
         'degradation_rate': 0.10,
         'failure_threshold': 0.70
+    },
+    'Steering': {
+        'name': '6. Steering',
+        'full_name': '6. Steering',
+        'base_cost': 286,
+        'degradation_rate': 0.08,
+        'failure_threshold': 0.75
+    },
+    'Exterior_Body': {
+        'name': '8. Exterior Body',
+        'full_name': '8. Exterior Body',
+        'base_cost': 400,
+        'degradation_rate': 0.05,
+        'failure_threshold': 0.80
+    },
+    'Interior': {
+        'name': '9. Interior',
+        'full_name': '9. Interior',
+        'base_cost': 84,
+        'degradation_rate': 0.05,
+        'failure_threshold': 0.80
+    },
+    'HVAC': {
+        'name': '10. HVAC',
+        'full_name': '10. HVAC',
+        'base_cost': 529,
+        'degradation_rate': 0.12,
+        'failure_threshold': 0.65
+    },
+    'ITS_TMS': {
+        'name': '11. ITS / Technology Management System (TMS)',
+        'full_name': '11. ITS / Technology Management System (TMS)',
+        'base_cost': 67,
+        'degradation_rate': 0.08,
+        'failure_threshold': 0.75
+    },
+    'Doors_Ramps_Accessibility': {
+        'name': '12. Doors & Ramps / Accessibility',
+        'full_name': '12. Doors & Ramps / Accessibility',
+        'base_cost': 193,
+        'degradation_rate': 0.10,
+        'failure_threshold': 0.70
+    },
+    'Wheels_Tires': {
+        'name': '13. Wheels and Tires',
+        'full_name': '13. Wheels and Tires',
+        'base_cost': 330,
+        'degradation_rate': 0.15,
+        'failure_threshold': 0.70
+    },
+    'Miscellaneous': {
+        'name': '14. Miscellaneous',
+        'full_name': '14. Miscellaneous',
+        'base_cost': 391,
+        'degradation_rate': 0.08,
+        'failure_threshold': 0.75
     }
 }
 

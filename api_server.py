@@ -141,7 +141,8 @@ def load_cost_model(subsystem_name: str):
 
 def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str: str,
                          initial_age_months: int, initial_mileage_km: int,
-                         bus_make: str = "New Flyer", bus_model: str = "Xcelsior NG"):
+                         bus_make: str = "New Flyer", bus_model: str = "Xcelsior NG",
+                         year: int = None, length_ft: int = None, propulsion_type: str = None):
     """Predict costs for a date range"""
 
     # Parse dates
@@ -169,15 +170,18 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
             detail="Maximum prediction range is 24 months"
         )
 
-    # Load historical data
-    csv_path = 'data/Bus_Maintenance_TimeSeries_2023-2025.csv'
+    # Load historical data - use YRT data which has all subsystems
+    csv_path = 'data/YRT_FZ_sample_data.csv'
     if not os.path.exists(csv_path):
-        csv_path = 'Bus_Maintenance_TimeSeries_2023-2025.csv'
+        # Fallback to old data location
+        csv_path = 'data/Bus_Maintenance_TimeSeries_2023-2025.csv'
         if not os.path.exists(csv_path):
-            raise HTTPException(
-                status_code=404,
-                detail="Training data not found"
-            )
+            csv_path = 'Bus_Maintenance_TimeSeries_2023-2025.csv'
+            if not os.path.exists(csv_path):
+                raise HTTPException(
+                    status_code=404,
+                    detail="Training data not found"
+                )
 
     df = pd.read_csv(csv_path)
     df['Date'] = pd.to_datetime(df['Date'])
@@ -201,6 +205,24 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
     model = model_data['model']
     scaler_X = model_data['scaler_X']
     scaler_y = model_data['scaler_y']
+    metadata = model_data['metadata']
+
+    # Check if model has bus-specific features (backward compatibility)
+    feature_cols = metadata.get('feature_cols', [])
+    has_bus_features = 'Make_encoded' in feature_cols
+
+    if has_bus_features:
+        # Get encoding maps from metadata
+        make_map = metadata.get('encodings', {}).get('make_map', {'New Flyer': 0})
+        model_map = metadata.get('encodings', {}).get('model_map', {'Xcelsior CHARGE': 0})
+
+        # Encode user-provided bus make/model
+        make_encoded = make_map.get(bus_make, 0)
+        model_encoded = model_map.get(bus_model, 0)
+    else:
+        # Old model without bus features
+        make_encoded = None
+        model_encoded = None
 
     # Create future features
     last_6_months = subsystem_df.tail(6).copy()
@@ -232,7 +254,7 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
         cm_parts = last_row['CM_Parts_Cost'] * aging_factor
 
         # Create feature row
-        new_row = pd.DataFrame([{
+        row_data = {
             'Date': target_date,
             'PM_Labour_Cost': pm_labour,
             'PM_Parts_Cost': pm_parts,
@@ -242,17 +264,22 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
             'Mileage_km': new_mileage,
             'month': new_month,
             'days_since_start': new_days
-        }])
+        }
+
+        # Add bus features if model supports them
+        if has_bus_features:
+            row_data['Make_encoded'] = make_encoded
+            row_data['Model_encoded'] = model_encoded
+
+        new_row = pd.DataFrame([row_data])
 
         # Update rolling window
         last_6_months = pd.concat([last_6_months, new_row]).tail(6).reset_index(drop=True)
 
-        # Prepare sequence for prediction
-        feature_cols = ['PM_Labour_Cost', 'PM_Parts_Cost', 'CM_Labour_Cost', 'CM_Parts_Cost',
-                       'Age_months', 'Mileage_km', 'month', 'days_since_start']
-
+        # Prepare sequence for prediction using the model's expected features
         sequence = last_6_months[feature_cols].values
-        sequence_scaled = scaler_X.transform(sequence.reshape(-1, 8)).reshape(1, 6, 8)
+        n_features = len(feature_cols)
+        sequence_scaled = scaler_X.transform(sequence.reshape(-1, n_features)).reshape(1, 6, n_features)
 
         # Predict
         pred_scaled = model.predict(sequence_scaled, verbose=0)
@@ -295,13 +322,42 @@ async def root():
 
 @app.get("/api/subsystems", response_model=List[SubsystemInfo])
 async def get_subsystems():
-    """Get list of available subsystems"""
-    subsystems = [
-        {"id": "HV_Battery", "name": "HV Battery Packs"},
-        {"id": "Traction_Motor", "name": "Traction Motor"},
-        {"id": "HVAC_Roof", "name": "Roof HVAC Unit"},
-        {"id": "Air_Compressor", "name": "Air Compressor (Braking)"}
-    ]
+    """Get list of available subsystems from trained models"""
+    subsystems = []
+
+    if not os.path.exists(MODEL_DIR):
+        return subsystems
+
+    # Scan the models directory for trained subsystem models
+    for item in os.listdir(MODEL_DIR):
+        model_path = os.path.join(MODEL_DIR, item)
+
+        # Check if it's a directory and contains a metadata.json file
+        if os.path.isdir(model_path):
+            metadata_file = os.path.join(model_path, 'metadata.json')
+            if os.path.exists(metadata_file):
+                try:
+                    with open(metadata_file, 'r') as f:
+                        metadata = json.load(f)
+
+                    # Extract subsystem name from metadata or folder name
+                    subsystem_name = metadata.get('subsystem', item.replace('_cost_model', ''))
+
+                    # Create ID by replacing spaces with underscores and removing special chars
+                    subsystem_id = subsystem_name.replace(' ', '_').replace('/', '_').replace('&', 'and')
+                    subsystem_id = ''.join(c for c in subsystem_id if c.isalnum() or c == '_')
+
+                    subsystems.append({
+                        "id": subsystem_id,
+                        "name": subsystem_name
+                    })
+                except Exception as e:
+                    print(f"Error reading metadata for {item}: {e}")
+                    continue
+
+    # Sort subsystems by name for better UX
+    subsystems = sorted(subsystems, key=lambda x: x['name'])
+
     return subsystems
 
 
@@ -309,14 +365,22 @@ async def get_subsystems():
 async def predict_costs(request: PredictionRequest):
     """Predict costs for a subsystem over a date range"""
     try:
+        # Convert subsystem ID to name
+        subsystems = await get_subsystems()
+        subsystem_map = {s["id"]: s["name"] for s in subsystems}
+        subsystem_name = subsystem_map.get(request.subsystem, request.subsystem)
+
         result = predict_future_costs(
-            subsystem_name=request.subsystem,
+            subsystem_name=subsystem_name,
             start_date_str=request.start_date,
             end_date_str=request.end_date,
             initial_age_months=request.age_months,
             initial_mileage_km=request.mileage_km,
             bus_make=request.bus_make,
-            bus_model=request.bus_model
+            bus_model=request.bus_model,
+            year=request.year,
+            length_ft=request.length_ft,
+            propulsion_type=request.propulsion_type
         )
         return result
     except ValueError as e:
@@ -328,10 +392,14 @@ async def predict_costs(request: PredictionRequest):
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
+    # Get available subsystems dynamically
+    subsystems = await get_subsystems()
+    subsystem_ids = [s["id"] for s in subsystems]
+
     return {
         "status": "healthy",
         "models_loaded": list(loaded_models.keys()),
-        "available_subsystems": ["HV_Battery", "Traction_Motor", "HVAC_Roof", "Air_Compressor"]
+        "available_subsystems": subsystem_ids
     }
 
 
