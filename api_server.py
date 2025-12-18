@@ -207,22 +207,8 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
     scaler_y = model_data['scaler_y']
     metadata = model_data['metadata']
 
-    # Check if model has bus-specific features (backward compatibility)
+    # Get feature columns from metadata
     feature_cols = metadata.get('feature_cols', [])
-    has_bus_features = 'Make_encoded' in feature_cols
-
-    if has_bus_features:
-        # Get encoding maps from metadata
-        make_map = metadata.get('encodings', {}).get('make_map', {'New Flyer': 0})
-        model_map = metadata.get('encodings', {}).get('model_map', {'Xcelsior CHARGE': 0})
-
-        # Encode user-provided bus make/model
-        make_encoded = make_map.get(bus_make, 0)
-        model_encoded = model_map.get(bus_model, 0)
-    else:
-        # Old model without bus features
-        make_encoded = None
-        model_encoded = None
 
     # Create future features
     last_6_months = subsystem_df.tail(6).copy()
@@ -265,11 +251,6 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
             'month': new_month,
             'days_since_start': new_days
         }
-
-        # Add bus features if model supports them
-        if has_bus_features:
-            row_data['Make_encoded'] = make_encoded
-            row_data['Model_encoded'] = model_encoded
 
         new_row = pd.DataFrame([row_data])
 

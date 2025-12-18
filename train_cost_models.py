@@ -304,13 +304,6 @@ def create_ml_features(subsystem_df):
     df = subsystem_df.copy()
     df = df.sort_values('Date').reset_index(drop=True)
 
-    # Add bus-specific encodings
-    make_map = {'New Flyer': 0, 'Gillig': 1, 'Nova Bus': 2, 'Proterra': 3, 'BYD': 4, 'Alexander Dennis': 5}
-    model_map = {'Xcelsior CHARGE': 0, 'Xcelsior NG': 1, 'Xcelsior': 2, 'Low Floor': 3, 'LFS': 4}
-
-    df['Make_encoded'] = df['Make'].map(make_map).fillna(0)
-    df['Model_encoded'] = df['Model'].map(model_map).fillna(0)
-
     # Time-based features
     df['month'] = df['Date'].dt.month
     df['quarter'] = df['Date'].dt.quarter
@@ -358,8 +351,6 @@ def get_ml_feature_cols():
         'PM_Labour_Cost', 'PM_Parts_Cost', 'CM_Labour_Cost', 'CM_Parts_Cost',
         # Vehicle state
         'Age_months', 'Mileage_km', 'mileage_change', 'age_group',
-        # Bus-specific features
-        'Make_encoded', 'Model_encoded',
         # Temporal features
         'month', 'quarter', 'year', 'day_of_year', 'days_since_start',
         'month_sin', 'month_cos',
@@ -581,21 +572,12 @@ def train_subsystem_model(subsystem_name, df, sequence_length=6, train_ml=True, 
     subsystem_df['month'] = subsystem_df['Date'].dt.month
     subsystem_df['days_since_start'] = (subsystem_df['Date'] - subsystem_df['Date'].min()).dt.days
 
-    # Add bus-specific features with encoding
-    # Create numerical encodings for categorical features
-    make_map = {'New Flyer': 0, 'Gillig': 1, 'Nova Bus': 2, 'Proterra': 3, 'BYD': 4, 'Alexander Dennis': 5}
-    model_map = {'Xcelsior CHARGE': 0, 'Xcelsior NG': 1, 'Xcelsior': 2, 'Low Floor': 3, 'LFS': 4}
-
-    subsystem_df['Make_encoded'] = subsystem_df['Make'].map(make_map).fillna(0)
-    subsystem_df['Model_encoded'] = subsystem_df['Model'].map(model_map).fillna(0)
-
-    # Select features for training
+    # Select features for training (no Make/Model in YRT data)
     feature_cols = [
         'PM_Labour_Cost', 'PM_Parts_Cost',
         'CM_Labour_Cost', 'CM_Parts_Cost',
         'Age_months', 'Mileage_km',
-        'month', 'days_since_start',
-        'Make_encoded', 'Model_encoded'
+        'month', 'days_since_start'
     ]
 
     # Calculate target (total cost)
@@ -755,11 +737,7 @@ def train_subsystem_model(subsystem_name, df, sequence_length=6, train_ml=True, 
         'original_records': int(len(subsystem_df)),
         'avg_cost': float(avg_cost),
         'mae_pct_of_avg': float(mae_pct),
-        'total_epochs': int(len(history.history['loss'])),
-        'encodings': {
-            'make_map': make_map,
-            'model_map': model_map
-        }
+        'total_epochs': int(len(history.history['loss']))
     }
 
     # Add ML comparison results
