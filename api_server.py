@@ -124,20 +124,39 @@ def load_cost_model(subsystem_name: str):
     with open(metadata_path, 'r') as f:
         metadata = json.load(f)
 
-    # Load model
+    # Check if this is an ML-only model or LSTM model
     model_path = os.path.join(model_dir, 'model.h5')
-    model = keras.models.load_model(model_path, compile=False)
+    model_type = metadata.get('model_type', 'LSTM')
 
-    # Load scalers
-    scaler_X = joblib.load(os.path.join(model_dir, 'scaler_X.pkl'))
-    scaler_y = joblib.load(os.path.join(model_dir, 'scaler_y.pkl'))
+    if os.path.exists(model_path) and model_type == 'LSTM':
+        # LSTM model
+        model = keras.models.load_model(model_path, compile=False)
+        scaler_X = joblib.load(os.path.join(model_dir, 'scaler_X.pkl'))
+        scaler_y = joblib.load(os.path.join(model_dir, 'scaler_y.pkl'))
 
-    model_data = {
-        'model': model,
-        'scaler_X': scaler_X,
-        'scaler_y': scaler_y,
-        'metadata': metadata
-    }
+        model_data = {
+            'model': model,
+            'scaler_X': scaler_X,
+            'scaler_y': scaler_y,
+            'metadata': metadata,
+            'type': 'LSTM'
+        }
+    else:
+        # ML-only model (RandomForest/XGBoost)
+        rf_model = joblib.load(os.path.join(model_dir, 'rf_model.pkl'))
+        ml_scaler = joblib.load(os.path.join(model_dir, 'ml_scaler.pkl'))
+
+        # Try to load XGBoost if available
+        xgb_path = os.path.join(model_dir, 'xgb_model.pkl')
+        xgb_model = joblib.load(xgb_path) if os.path.exists(xgb_path) else None
+
+        model_data = {
+            'rf_model': rf_model,
+            'xgb_model': xgb_model,
+            'ml_scaler': ml_scaler,
+            'metadata': metadata,
+            'type': 'ML'
+        }
 
     loaded_models[subsystem_name] = model_data
     return model_data
@@ -341,6 +360,13 @@ async def get_subsystems():
 
                     # Extract subsystem name from metadata or folder name
                     subsystem_name = metadata.get('subsystem', item.replace('_cost_model', ''))
+
+                    # Skip ML-only models (they can't do time-series predictions)
+                    model_type = metadata.get('model_type', 'LSTM')
+                    model_h5_path = os.path.join(model_path, 'model.h5')
+                    if model_type != 'LSTM' or not os.path.exists(model_h5_path):
+                        print(f"Skipping {subsystem_name} - ML-only model (no LSTM)")
+                        continue
 
                     # Determine reliability based on sample count
                     original_records = metadata.get('original_records', 0)
