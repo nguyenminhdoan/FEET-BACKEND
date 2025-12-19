@@ -83,11 +83,15 @@ class PredictionResponse(BaseModel):
     subsystem: str
     predictions: List[PredictionData]
     summary: SummaryData
+    reliability: str  # 'reliable', 'limited', or 'unreliable'
+    sample_count: int
 
 
 class SubsystemInfo(BaseModel):
     id: str
     name: str
+    reliability: str  # 'reliable', 'limited', or 'unreliable'
+    sample_count: int
 
 
 class HealthResponse(BaseModel):
@@ -286,10 +290,21 @@ def predict_future_costs(subsystem_name: str, start_date_str: str, end_date_str:
         'cost_trend': round(float(costs[-1] - costs[0]), 2)
     }
 
+    # Determine reliability based on sample count
+    original_records = metadata.get('original_records', 0)
+    if original_records >= 30:
+        reliability = 'reliable'
+    elif original_records >= 10:
+        reliability = 'limited'
+    else:
+        reliability = 'unreliable'
+
     return {
         'subsystem': subsystem_name,
         'predictions': predictions,
-        'summary': summary
+        'summary': summary,
+        'reliability': reliability,
+        'sample_count': original_records
     }
 
 
@@ -327,12 +342,19 @@ async def get_subsystems():
                     # Extract subsystem name from metadata or folder name
                     subsystem_name = metadata.get('subsystem', item.replace('_cost_model', ''))
 
-                    # Filter out subsystems with tiny datasets (< 10 samples)
-                    # These are marked with 🚨 in training output and are very unreliable
+                    # Determine reliability based on sample count
                     original_records = metadata.get('original_records', 0)
-                    if original_records < 10:
-                        print(f"Skipping {subsystem_name} - only {original_records} samples (unreliable)")
-                        continue
+
+                    # Reliability levels:
+                    # - reliable: >= 30 samples
+                    # - limited: 10-29 samples
+                    # - unreliable: < 10 samples
+                    if original_records >= 30:
+                        reliability = 'reliable'
+                    elif original_records >= 10:
+                        reliability = 'limited'
+                    else:
+                        reliability = 'unreliable'
 
                     # Create ID by replacing spaces with underscores and removing special chars
                     subsystem_id = subsystem_name.replace(' ', '_').replace('/', '_').replace('&', 'and')
@@ -340,7 +362,9 @@ async def get_subsystems():
 
                     subsystems.append({
                         "id": subsystem_id,
-                        "name": subsystem_name
+                        "name": subsystem_name,
+                        "reliability": reliability,
+                        "sample_count": original_records
                     })
                 except Exception as e:
                     print(f"Error reading metadata for {item}: {e}")
